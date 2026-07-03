@@ -1,0 +1,6 @@
+{
+  "name": "StudioOS",
+  "description": "An AI-powered Product Operating System Generator that converts core product ideas into executable strategies, workflows, metrics, and deliverables.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

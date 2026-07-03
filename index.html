@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StudioOS | AI-powered Product Operating System Generator</title>
+    <meta name="description" content="StudioOS is an operating system for builders. Generate precise engineering strategies, team structures, and executable workflow protocols from a single prompt." />
+    <!-- Apply theme before React hydrates to prevent flash of unstyled content -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('studio_os_theme');
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var theme = stored === 'light' || stored === 'dark' ? stored : (prefersDark ? 'dark' : 'light');
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
