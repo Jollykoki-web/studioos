@@ -25,11 +25,6 @@ import {
 
 import { Project } from "./types";
 import {
-  loadStoredProjects,
-  saveProjectToStorage,
-  deleteProjectFromStorage,
-  clearUserStorage,
-  getStorageKey,
   exportToMarkdown,
   INITIAL_SEEDED_PROJECTS,
 } from "./data";
@@ -69,6 +64,7 @@ export default function App() {
 
   // ─── Projects ────────────────────────────────────────────────────────────────
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   // ─── Edit Project ────────────────────────────────────────────────────────────
@@ -129,7 +125,21 @@ export default function App() {
 
 
 
-  const syncWithServer = async (token: string | null, userId?: string | null) => {
+  // Cross-browser UUID helper — uses crypto.randomUUID() when available (fast path),
+  // falls back to crypto.getRandomValues() for older mobile browsers (iOS <15.4, etc.).
+  const generateUUID = (): string => {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+    // RFC 4122 v4 fallback via getRandomValues
+    return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => {
+      const n = Number(c);
+      return (n ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (n / 4)))).toString(16);
+    });
+  };
+
+  const syncWithServer = async (token: string | null) => {
+    setProjectsLoading(true);
     try {
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -137,32 +147,28 @@ export default function App() {
       if (resp.ok) {
         const resData = await resp.json();
         if (resData.success && resData.projects) {
-          setActiveDatabase(resData.database || "local-file-fallback");
-          setSupabaseConfigured(!!resData.supabaseConfigured);
-          const serverProjects: Project[] = resData.projects;
-          const localProjects = loadStoredProjects(userId);
-          const projectMap = new Map<string, Project>();
-          localProjects.forEach((p) => projectMap.set(p.id, p));
-          serverProjects.forEach((p) => projectMap.set(p.id, p));
-          const mergedList = Array.from(projectMap.values());
-          localStorage.setItem(getStorageKey(userId), JSON.stringify(mergedList));
-          setProjects(mergedList);
+          const db = resData.database || "offline";
+          setActiveDatabase(db as any);
+          setSupabaseConfigured(db === "supabase");
+          setProjects(resData.projects);
           return;
         }
       }
     } catch (e) {
-      console.warn("Server connection failed. Using local storage.", e);
+      console.warn("Server connection failed.", e);
       setActiveDatabase("offline");
+    } finally {
+      setProjectsLoading(false);
     }
-    setProjects(loadStoredProjects(userId));
+    setProjects([]);
   };
 
   useEffect(() => {
     if (!authInitialized) return;
     if (sessionToken && currentUser) {
-      syncWithServer(sessionToken, currentUser.id);
+      syncWithServer(sessionToken);
     } else if (currentUser === null) {
-      setProjects(loadStoredProjects(null));
+      setProjects([]);
     }
   }, [sessionToken, authInitialized, currentUser]);
 
@@ -242,7 +248,6 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    if (currentUser) clearUserStorage(currentUser.id);
     setCurrentUser(null);
     setSessionToken(null);
     setProjects([]);
@@ -336,7 +341,7 @@ export default function App() {
       if (rawResult.success && rawResult.project) {
         const newProject: Project = {
           ...rawResult.project,
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           status: "active",
           aiMetadata: rawResult.metadata
             ? { model: rawResult.metadata.model, provider: rawResult.metadata.provider, generationTime: rawResult.metadata.timestamp, durationMs: rawResult.metadata.durationMs }
@@ -345,25 +350,33 @@ export default function App() {
           updatedAt: new Date().toISOString(),
         };
 
-        const updatedList = saveProjectToStorage(newProject, currentUser?.id);
-        setProjects(updatedList);
-        setSelectedProjectId(newProject.id);
-
         if (currentUser) {
           try {
             const headers: Record<string, string> = { "Content-Type": "application/json" };
             if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
-            await fetch("/api/projects", { method: "POST", headers, body: JSON.stringify({ project: newProject }) });
+            const res = await fetch("/api/projects", { method: "POST", headers, body: JSON.stringify({ project: newProject }) });
+            if (!res.ok) throw new Error("Failed to save to Supabase");
+            
+            setProjects((prev) => [newProject, ...prev]);
+            setSelectedProjectId(newProject.id);
+            setWizardName("");
+            setWizardDesc("");
+            setWizardAudience("");
+            setCurrentView("view");
+            setActiveViewerTab("strategy");
           } catch (syncErr) {
             console.error("Failed to sync project to server", syncErr);
+            throw new Error("Failed to save project to server.");
           }
+        } else {
+            setProjects((prev) => [newProject, ...prev]);
+            setSelectedProjectId(newProject.id);
+            setWizardName("");
+            setWizardDesc("");
+            setWizardAudience("");
+            setCurrentView("view");
+            setActiveViewerTab("strategy");
         }
-
-        setWizardName("");
-        setWizardDesc("");
-        setWizardAudience("");
-        setCurrentView("view");
-        setActiveViewerTab("strategy");
       } else {
         throw new Error("Invalid project structure returned by the analysis engine.");
       }
@@ -379,16 +392,21 @@ export default function App() {
   const handleDeleteProject = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm("Purge this operating system?")) {
-      const updatedList = deleteProjectFromStorage(id, currentUser?.id);
-      setProjects(updatedList);
-      if (selectedProjectId === id) setSelectedProjectId(null);
-
       if (currentUser) {
         try {
           const headers: Record<string, string> = {};
           if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
-          await fetch(`/api/projects/${id}`, { method: "DELETE", headers });
+          const res = await fetch(`/api/projects/${id}`, { method: "DELETE", headers });
+          if (res.ok) {
+            setProjects((prev) => prev.filter((p) => p.id !== id));
+            if (selectedProjectId === id) setSelectedProjectId(null);
+          } else {
+            console.error("Failed to delete from server");
+          }
         } catch (_) {}
+      } else {
+        setProjects((prev) => prev.filter((p) => p.id !== id));
+        if (selectedProjectId === id) setSelectedProjectId(null);
       }
     }
   };
@@ -400,24 +418,28 @@ export default function App() {
 
   const handleSaveEditedProject = async (updatedProject: Project): Promise<void> => {
     const withTimestamp: Project = { ...updatedProject, updatedAt: new Date().toISOString() };
-    const updatedList = saveProjectToStorage(withTimestamp, currentUser?.id);
-    setProjects(updatedList);
-
-    // Also refresh selected project so viewer shows updated data immediately
-    setSelectedProjectId(withTimestamp.id);
 
     if (currentUser) {
       try {
         const headers: Record<string, string> = { "Content-Type": "application/json" };
         if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
-        await fetch(`/api/projects/${withTimestamp.id}`, {
+        const res = await fetch(`/api/projects/${withTimestamp.id}`, {
           method: "PUT",
           headers,
           body: JSON.stringify({ project: withTimestamp }),
         });
+        if (res.ok) {
+          setProjects((prev) => prev.map((p) => (p.id === withTimestamp.id ? withTimestamp : p)));
+          setSelectedProjectId(withTimestamp.id);
+        } else {
+          console.error("Failed to update on server");
+        }
       } catch (syncErr) {
         console.error("Failed to sync updated project to server", syncErr);
       }
+    } else {
+      setProjects((prev) => prev.map((p) => (p.id === withTimestamp.id ? withTimestamp : p)));
+      setSelectedProjectId(withTimestamp.id);
     }
 
     setCurrentView("view");
@@ -453,23 +475,29 @@ export default function App() {
   const handleUseTemplate = async (template: Project) => {
     const newProject: Project = {
       ...template,
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       name: `${template.name} (Copy)`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    const updatedList = saveProjectToStorage(newProject, currentUser?.id);
-    setProjects(updatedList);
-    setSelectedProjectId(newProject.id);
 
     if (currentUser) {
       try {
         const headers: Record<string, string> = { "Content-Type": "application/json" };
         if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
-        await fetch("/api/projects", { method: "POST", headers, body: JSON.stringify({ project: newProject }) });
+        const res = await fetch("/api/projects", { method: "POST", headers, body: JSON.stringify({ project: newProject }) });
+        if (res.ok) {
+          setProjects((prev) => [newProject, ...prev]);
+          setSelectedProjectId(newProject.id);
+        } else {
+          console.error("Failed to duplicate on server");
+        }
       } catch (syncErr) {
         console.error("Failed to sync project to server", syncErr);
       }
+    } else {
+      setProjects((prev) => [newProject, ...prev]);
+      setSelectedProjectId(newProject.id);
     }
   };
 
@@ -765,7 +793,19 @@ export default function App() {
               {/* My Projects */}
               <div>
                 <h2 className="text-base font-semibold tracking-tight mb-3" style={{ color: "var(--text-primary)" }}>My Projects</h2>
-                {filteredProjects.length > 0 ? (
+                {projectsLoading ? (
+                  /* Loading skeleton — shown while the initial Supabase fetch is in flight.
+                     Prevents the "No Projects Yet" empty state from flashing before data arrives. */
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {[0, 1, 2].map((i) => (
+                      <div
+                        key={i}
+                        className="h-44 rounded-xl border animate-pulse"
+                        style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}
+                      />
+                    ))}
+                  </div>
+                ) : filteredProjects.length > 0 ? (
                   <motion.div variants={listContainer} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredProjects.map((project) => (
                       <motion.div key={project.id} variants={listItem}>

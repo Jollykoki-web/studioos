@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
-import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
@@ -325,19 +324,19 @@ Please output a strictly valid JSON object that matches the following structure:
   }
 });
 
-const PROJECTS_FILE = path.join(process.cwd(), "projects-db.json");
-
-// Lazy Supabase Client Initializer & URL Sanitizer
+// --------------------------------------------------------------------------
+// SUPABASE CLIENT HELPERS
+// --------------------------------------------------------------------------
 function cleanSupabaseUrl(rawUrl: string | undefined): string | null {
   if (!rawUrl) return null;
   let url = rawUrl.trim();
   if (url === "MY_SUPABASE_URL" || url === "") return null;
 
-  // Strip trailing slashes and common prefixes/suffixes
-  url = url.replace(/\/+$/, ""); // trailing slashes
-  url = url.replace(/\/rest\/v1\/?$/, ""); // strip /rest/v1 or /rest/v1/
+  // Strip trailing slashes and common suffixes
+  url = url.replace(/\/+$/, "");
+  url = url.replace(/\/rest\/v1\/?$/, "");
 
-  // Ensure correct protocol is prefixed
+  // Ensure correct protocol
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
     url = "https://" + url;
   }
@@ -353,30 +352,6 @@ function getSupabase(authHeader?: string) {
   }
   const options = authHeader ? { global: { headers: { Authorization: authHeader } } } : {};
   return createClient(url, key.trim(), options);
-}
-
-// --------------------------------------------------------------------------
-// LOCAL FILE BACKEND (FALLBACK)
-// --------------------------------------------------------------------------
-async function readProjectsFile(): Promise<any[]> {
-  try {
-    if (!fs.existsSync(PROJECTS_FILE)) {
-      return [];
-    }
-    const data = await fs.promises.readFile(PROJECTS_FILE, "utf-8");
-    return JSON.parse(data);
-  } catch (err) {
-    console.error("Fallback: Error reading projects file:", err);
-    return [];
-  }
-}
-
-async function writeProjectsFile(projects: any[]): Promise<void> {
-  try {
-    await fs.promises.writeFile(PROJECTS_FILE, JSON.stringify(projects, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Fallback: Error writing projects file:", err);
-  }
 }
 
 // --------------------------------------------------------------------------
@@ -854,45 +829,25 @@ app.get("/api/projects", async (req, res) => {
   const authHeader = req.headers.authorization;
   const token = authHeader?.replace("Bearer ", "").trim();
   const supabase = getSupabase(authHeader);
-  let supabaseError = null;
-  const hasSupabaseEnv = !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY && process.env.SUPABASE_URL !== "MY_SUPABASE_URL");
 
-  // SECURITY: If the user provided a token, they MUST only be served their own isolated data from Supabase.
-  // If Supabase is not configured, we cannot serve them isolated data. We must return an error rather than falling back to a shared file.
-  if (token) {
-    if (!supabase) {
-      res.status(503).json({ error: "Database temporarily unavailable. Please restart the server to load environment variables." });
-      return;
-    }
-    try {
-      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-      if (authError || !user) {
-        res.status(401).json({ error: "Unauthorized" });
-        return;
-      }
-
-      const projects = await getProjectsFromSupabase(supabase, user.id);
-      res.json({ success: true, database: "supabase", projects });
-      return;
-    } catch (err: any) {
-      console.warn("Supabase fetch failed.", err?.message || err);
-      res.status(503).json({
-        error: "Database temporarily unavailable.",
-        details: err?.message || String(err)
-      });
-      return;
-    }
+  if (!token || !supabase) {
+    res.status(401).json({ error: "Unauthorized or Database Unavailable" });
+    return;
   }
 
-  // Only reach here for unauthenticated / guest scenarios
-  const projects = await readProjectsFile();
-  res.json({
-    success: true,
-    database: "local-file-fallback",
-    supabaseConfigured: hasSupabaseEnv,
-    supabaseError,
-    projects: projects
-  });
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const projects = await getProjectsFromSupabase(supabase, user.id);
+    res.json({ success: true, database: "supabase", projects });
+  } catch (err: any) {
+    console.warn("Supabase fetch failed.", err?.message || err);
+    res.status(503).json({ error: "Database temporarily unavailable.", details: err?.message || String(err) });
+  }
 });
 
 app.post("/api/projects", async (req, res) => {
@@ -905,50 +860,61 @@ app.post("/api/projects", async (req, res) => {
   const authHeader = req.headers.authorization;
   const token = authHeader?.replace("Bearer ", "").trim();
   const supabase = getSupabase(authHeader);
-  let supabaseError = null;
-  const hasSupabaseEnv = !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY && process.env.SUPABASE_URL !== "MY_SUPABASE_URL");
 
-  if (token) {
-    if (!supabase) {
-      res.status(503).json({ error: "Database temporarily unavailable. Please restart the server." });
-      return;
-    }
-    try {
-      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-      if (authError || !user) {
-        res.status(401).json({ error: "Unauthorized" });
-        return;
-      }
-
-      await saveProjectToSupabase(supabase, project, user.id);
-      res.json({ success: true, database: "supabase", project });
-      return;
-    } catch (err: any) {
-      console.warn("Supabase save failed.", err?.message || err);
-      res.status(503).json({
-        error: "Database temporarily unavailable.",
-        details: err?.message || String(err)
-      });
-      return;
-    }
+  if (!token || !supabase) {
+    res.status(401).json({ error: "Unauthorized or Database Unavailable" });
+    return;
   }
 
-  // Fallback save to local file (unauthenticated only)
-  const projects = await readProjectsFile();
-  const otherProjects = projects.filter(p => p.id !== project.id);
-  const updatedProject = {
-    ...project,
-    updatedAt: new Date().toISOString()
-  };
-  const updatedProjects = [...otherProjects, updatedProject];
-  await writeProjectsFile(updatedProjects);
-  res.json({
-    success: true,
-    database: "local-file-fallback",
-    supabaseConfigured: hasSupabaseEnv,
-    supabaseError,
-    project: updatedProject
-  });
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    await saveProjectToSupabase(supabase, project, user.id);
+    res.json({ success: true, database: "supabase", project });
+  } catch (err: any) {
+    console.warn("Supabase save failed.", err?.message || err);
+    res.status(503).json({ error: "Database temporarily unavailable.", details: err?.message || String(err) });
+  }
+});
+
+app.put("/api/projects/:id", async (req, res) => {
+  const { project } = req.body;
+  const id = req.params.id;
+  
+  if (!project || !id) {
+    res.status(400).json({ error: "Project payload and ID are required." });
+    return;
+  }
+
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.replace("Bearer ", "").trim();
+  const supabase = getSupabase(authHeader);
+
+  if (!token || !supabase) {
+    res.status(401).json({ error: "Unauthorized or Database Unavailable" });
+    return;
+  }
+
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    // Ensure the project ID in the body matches the URL
+    project.id = id;
+    
+    await saveProjectToSupabase(supabase, project, user.id);
+    res.json({ success: true, database: "supabase", project });
+  } catch (err: any) {
+    console.warn("Supabase update failed.", err?.message || err);
+    res.status(503).json({ error: "Database temporarily unavailable.", details: err?.message || String(err) });
+  }
 });
 
 app.delete("/api/projects/:id", async (req, res) => {
@@ -961,52 +927,33 @@ app.delete("/api/projects/:id", async (req, res) => {
   const authHeader = req.headers.authorization;
   const token = authHeader?.replace("Bearer ", "").trim();
   const supabase = getSupabase(authHeader);
-  let supabaseError = null;
-  const hasSupabaseEnv = !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY && process.env.SUPABASE_URL !== "MY_SUPABASE_URL");
 
-  if (token) {
-    if (!supabase) {
-      res.status(503).json({ error: "Database temporarily unavailable. Please restart the server." });
-      return;
-    }
-    try {
-      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-      if (authError || !user) {
-        res.status(401).json({ error: "Unauthorized" });
-        return;
-      }
-
-      const { error } = await supabase.from("projects").delete().eq("id", id).eq("user_id", user.id);
-      if (error) throw error;
-
-      await supabase.from("activity_log").insert({
-        user_id: user.id,
-        action: "Project Deleted",
-        details: { project_id: id }
-      });
-
-      res.json({ success: true, database: "supabase" });
-      return;
-    } catch (err: any) {
-      console.warn("Supabase delete failed.", err?.message || err);
-      res.status(503).json({
-        error: "Database temporarily unavailable.",
-        details: err?.message || String(err)
-      });
-      return;
-    }
+  if (!token || !supabase) {
+    res.status(401).json({ error: "Unauthorized or Database Unavailable" });
+    return;
   }
 
-  // Fallback delete on local file
-  const projects = await readProjectsFile();
-  const filteredProjects = projects.filter(p => p.id !== id);
-  await writeProjectsFile(filteredProjects);
-  res.json({
-    success: true,
-    database: "local-file-fallback",
-    supabaseConfigured: hasSupabaseEnv,
-    supabaseError
-  });
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const { error } = await supabase.from("projects").delete().eq("id", id).eq("user_id", user.id);
+    if (error) throw error;
+
+    await supabase.from("activity_log").insert({
+      user_id: user.id,
+      action: "Project Deleted",
+      details: { project_id: id }
+    });
+
+    res.json({ success: true, database: "supabase" });
+  } catch (err: any) {
+    console.warn("Supabase delete failed.", err?.message || err);
+    res.status(503).json({ error: "Database temporarily unavailable.", details: err?.message || String(err) });
+  }
 });
 
 
@@ -1018,8 +965,18 @@ async function startServer() {
       server: { middlewareMode: true },
       appType: "spa",
     });
-    // Cast to `any` to bridge Connect.Server → Express middleware type gap
-    app.use(vite.middlewares as any);
+
+    // Only allow Vite to handle non-API requests.
+    // Without this guard, Vite's Connect middleware intercepts every request —
+    // including /api/* — and returns an HTML 404 page instead of JSON.
+    app.use((req, res, next) => {
+      if (req.path.startsWith("/api/")) {
+        // Skip Vite entirely; let Express handle all /api/* routes.
+        return next("router");
+      }
+      // Cast to `any` to bridge Connect.Server → Express middleware type gap
+      return (vite.middlewares as any)(req, res, next);
+    });
   } else {
     console.log("Starting in PRODUCTION mode...");
     const distPath = path.join(process.cwd(), "dist");
@@ -1028,6 +985,11 @@ async function startServer() {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
+
+  // JSON 404 fallback for any unmatched /api/* routes (must stay AFTER all API route registrations)
+  app.use("/api/*", (req, res) => {
+    res.status(404).json({ success: false, error: `API route not found: ${req.method} ${req.originalUrl}` });
+  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`StudioOS Server is online at http://localhost:${PORT}`);

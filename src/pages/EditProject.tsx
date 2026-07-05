@@ -58,7 +58,20 @@ const Field = ({ label, required, children, hint }: FieldProps) => (
   </div>
 );
 
+// Cross-browser UUID helper — crypto.randomUUID() fast path with crypto.getRandomValues() fallback
+// for older mobile browsers (iOS <15.4 / Android without randomUUID support).
+const generateUUID = (): string => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => {
+    const n = Number(c);
+    return (n ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (n / 4)))).toString(16);
+  });
+};
+
 const fieldCls = "w-full rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-sm text-[var(--text-primary)] placeholder-[var(--text-disabled)] px-3 py-2.5 focus:outline-none focus:border-[var(--border-focus)] focus:ring-1 focus:ring-[var(--border-focus)] transition-all";
+
 
 const SectionCard = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
   <div className={`rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] overflow-hidden ${className}`}>
@@ -275,7 +288,7 @@ const TeamEditor = ({
   const addRole = () =>
     set("roles", [
       ...team.roles,
-      { id: crypto.randomUUID(), title: "", count: 1, responsibilities: [], tools: [], vibe: "" },
+      { id: generateUUID(), title: "", count: 1, responsibilities: [], tools: [], vibe: "" },
     ]);
 
   const removeRole = (idx: number) => set("roles", team.roles.filter((_, i) => i !== idx));
@@ -342,7 +355,7 @@ const WorkflowEditor = ({
   const add = () =>
     onChange([
       ...workflow,
-      { id: crypto.randomUUID(), phaseName: "", description: "", input: "", process: "", output: "", timelineEstimate: "" },
+      { id: generateUUID(), phaseName: "", description: "", input: "", process: "", output: "", timelineEstimate: "" },
     ]);
 
   const remove = (idx: number) => onChange(workflow.filter((_, i) => i !== idx));
@@ -400,7 +413,7 @@ const DeliverablesEditor = ({
   const add = () =>
     onChange([
       ...deliverables,
-      { id: crypto.randomUUID(), name: "", category: "code", format: "", assignee: "", description: "", steps: [] },
+      { id: generateUUID(), name: "", category: "code", format: "", assignee: "", description: "", steps: [] },
     ]);
 
   const remove = (idx: number) => onChange(deliverables.filter((_, i) => i !== idx));
@@ -461,7 +474,7 @@ const QualityGatesEditor = ({
   const add = () =>
     onChange([
       ...gates,
-      { id: crypto.randomUUID(), phase: "", criteria: [], gatekeepers: [], remediationPath: "" },
+      { id: generateUUID(), phase: "", criteria: [], gatekeepers: [], remediationPath: "" },
     ]);
 
   const remove = (idx: number) => onChange(gates.filter((_, i) => i !== idx));
@@ -509,7 +522,7 @@ const AIHandoffsEditor = ({
   const add = () =>
     onChange([
       ...handoffs,
-      { id: crypto.randomUUID(), taskName: "", targetAI: "", contextRequired: [], promptTemplate: "", expectedOutputFormat: "", instructions: "" },
+      { id: generateUUID(), taskName: "", targetAI: "", contextRequired: [], promptTemplate: "", expectedOutputFormat: "", instructions: "" },
     ]);
 
   const remove = (idx: number) => onChange(handoffs.filter((_, i) => i !== idx));
@@ -564,7 +577,7 @@ const RisksEditor = ({
   const add = () =>
     onChange([
       ...risks,
-      { id: crypto.randomUUID(), category: "technical", description: "", likelihood: "Medium", impact: "Medium", mitigation: "" },
+      { id: generateUUID(), category: "technical", description: "", likelihood: "Medium", impact: "Medium", mitigation: "" },
     ]);
 
   const remove = (idx: number) => onChange(risks.filter((_, i) => i !== idx));
