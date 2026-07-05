@@ -528,15 +528,6 @@ export default function App() {
     exit: { opacity: 0, y: -10, filter: "blur(4px)", transition: { duration: 0.2 } },
   };
 
-  const listContainer = {
-    hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { staggerChildren: 0.05 } },
-  };
-
-  const listItem = {
-    hidden: { opacity: 0, y: 10 },
-    show: { opacity: 1, y: 0, transition: { type: "spring", damping: 25, stiffness: 200 } },
-  };
 
   // ─── RENDER ───────────────────────────────────────────────────────────────────
   return (
@@ -762,9 +753,14 @@ export default function App() {
               <div>
                 <h2 className="text-base font-semibold tracking-tight mb-3" style={{ color: "var(--text-primary)" }}>StudioOS Templates</h2>
                 {filteredTemplates.length > 0 ? (
-                  <motion.div variants={listContainer} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredTemplates.map((project) => (
-                      <motion.div key={project.id} variants={listItem}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredTemplates.map((project, i) => (
+                      <motion.div
+                        key={project.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ type: "spring", damping: 25, stiffness: 200, delay: i * 0.05 }}
+                      >
                         <SpotlightCard
                           onClick={() => { setSelectedProjectId(project.id); setCurrentView("view"); setActiveViewerTab("strategy"); }}
                           className="h-44 p-5 flex flex-col justify-between group"
@@ -806,9 +802,14 @@ export default function App() {
                     ))}
                   </div>
                 ) : filteredProjects.length > 0 ? (
-                  <motion.div variants={listContainer} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredProjects.map((project) => (
-                      <motion.div key={project.id} variants={listItem}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredProjects.map((project, i) => (
+                      <motion.div
+                        key={project.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ type: "spring", damping: 25, stiffness: 200, delay: i * 0.05 }}
+                      >
                         <SpotlightCard
                           onClick={() => { setSelectedProjectId(project.id); setCurrentView("view"); setActiveViewerTab("strategy"); }}
                           className="h-44 p-5 flex flex-col justify-between group"
