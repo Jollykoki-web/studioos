@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://via.placeholder.com/120x120.png?text=StudioOS" alt="StudioOS Logo" width="120" />
+  <img src="./assets/logo.png" alt="StudioOS Logo" width="120" />
   <h1>StudioOS</h1>
   <p><strong>An elite AI-powered Product Operating System Generator</strong></p>
   
@@ -150,16 +150,11 @@ studioos/
 
 | Landing Page | Dashboard |
 |:---:|:---:|
-| <img src="https://via.placeholder.com/400x250.png?text=Landing+Page" alt="Landing Page" width="400"/> | <img src="https://via.placeholder.com/400x250.png?text=Dashboard" alt="Dashboard" width="400"/> |
+| <img src="./assets/land.PNG" alt="Landing Page" width="400"/> | <img src="./assets/dashboard.PNG" alt="Dashboard" width="400"/> |
 
 | Project Workspace | Mobile View |
 |:---:|:---:|
-| <img src="https://via.placeholder.com/400x250.png?text=Workspace" alt="Project Workspace" width="400"/> | <img src="https://via.placeholder.com/400x250.png?text=Mobile+Responsive" alt="Mobile View" width="400"/> |
-
-> **Note on adding your own screenshots**: 
-> 1. Create a `screenshots` folder in the root of the project.
-> 2. Place your image files there (e.g., `landing.png`).
-> 3. Replace the `https://via.placeholder.com/...` URLs in the markdown table above with the relative path to your images (e.g., `./screenshots/landing.png`).
+| <img src="./assets/workspace.PNG" alt="Project Workspace" width="400"/> | <img src="./assets/mobileres.PNG" alt="Mobile View" width="400"/> |
 
 ---
 
