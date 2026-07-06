@@ -7,7 +7,7 @@
   [![React](https://img.shields.io/badge/React-19.0-61DAFB?logo=react&logoColor=black)](https://react.dev/)
   [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
   [![Supabase](https://img.shields.io/badge/Supabase-Database_&_Auth-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com/)
-  [![Google Gemini](https://img.shields.io/badge/Google_Gemini-AI_Provider-4285F4?logo=google&logoColor=white)](https://ai.google.dev/)
+  [![AI](https://img.shields.io/badge/AI_Engine-Gemini_%7C_Groq_%7C_OpenRouter-FF6F00?logo=openai&logoColor=white)](#)
 </div>
 
 <br />
@@ -16,7 +16,7 @@
 
 **StudioOS** is an intelligent, elite Product Operating System Generator designed for founders, architects, and engineering leads. It bridges the gap between raw product ideas and executable engineering reality. 
 
-By analyzing a simple product description and target audience, StudioOS leverages Google's Gemini AI to instantly generate a comprehensive, highly rigorous, and executable "Product OS." This eliminates vague buzzwords and provides concrete deliverables, custom team role allocations, actionable risk mitigations, a positioned strategy matrix, and high-quality AI handover prompts.
+By analyzing a simple product description and target audience, StudioOS leverages a highly available **multi-model AI pipeline** (featuring Google Gemini, Groq, and OpenRouter) to instantly generate a comprehensive, rigorous, and executable "Product OS." This eliminates vague buzzwords and provides concrete deliverables, custom team role allocations, actionable risk mitigations, a positioned strategy matrix, and high-quality AI handover prompts.
 
 ---
 
@@ -24,7 +24,7 @@ By analyzing a simple product description and target audience, StudioOS leverage
 
 StudioOS is built for production, prioritizing performance, reliability, and modern UX:
 
-- **🤖 AI-Powered Project Generation**: Transforms ideas into complete engineering plans using Google Gemini.
+- **🤖 Multi-Model AI Engine**: High-availability AI generation utilizing a cascading fallback system across Google Gemini, Groq, and OpenRouter to ensure your requests always succeed.
 - **🔐 Secure Authentication**: Integrated authentication with Supabase, including robust Google Sign-In support.
 - **📊 Project Dashboard**: A centralized workspace to view, search, and manage all your generated Product Operating Systems.
 - **✏️ Deep Project Editing**: Fully interactive editors for Strategy, Team Identity, Workflows, Deliverables, Quality Gates, and AI Handoffs.
@@ -47,7 +47,7 @@ StudioOS utilizes a full-stack TypeScript architecture, optimized for speed and 
 | **Backend** | Node.js, Express, `tsx` (Dev), `esbuild` (Prod) |
 | **Database** | PostgreSQL (via Supabase) |
 | **Authentication** | Supabase Auth (Email + Google OAuth) |
-| **AI Provider** | Google Gemini (`@google/genai` SDK) |
+| **AI Providers** | Google Gemini (`@google/genai`), Groq, OpenRouter |
 | **Language** | TypeScript |
 | **Deployment** | GitHub, Render (Web Service), Supabase |
 
@@ -61,13 +61,15 @@ The application follows a clean, decoupled client-server architecture with an in
 graph LR
   A[User / Browser] -->|React SPA| B(Express API Node.js)
   B -->|Database & Auth| C[(Supabase)]
-  B -->|AI Generation| D[Google Gemini API]
+  B -->|AI Generation Pipeline| D[Google Gemini]
+  D -.->|Fallback| E[Groq]
+  E -.->|Fallback| F[OpenRouter]
 ```
 
 1. **Client**: The React frontend handles all user interactions, UI state, and animations.
 2. **Backend**: An Express server serves the static Vite frontend in production and acts as a secure API gateway.
 3. **Data Layer**: Supabase manages session tokens securely and serves as the persistent PostgreSQL datastore.
-4. **AI Engine**: The backend securely communicates with Google Gemini to execute complex system prompts and return structured JSON responses.
+4. **AI Engine**: The backend orchestrates requests to Google Gemini, with robust fallbacks to Groq and OpenRouter if the primary provider fails, ensuring uninterrupted generation of complex JSON structures.
 
 ---
 
@@ -108,8 +110,10 @@ npm start
 Create a `.env` file in the root of your project. **Never commit this file to version control.**
 
 ```env
-# Google Gemini API Key for AI Generation
+# AI Providers (Cascading Fallback System)
 GEMINI_API_KEY="your_gemini_api_key_here"
+GROQ_API_KEY="your_groq_api_key_here"
+OPENROUTER_API_KEY="your_openrouter_api_key_here"
 
 # Supabase Configuration
 VITE_SUPABASE_URL="https://your-project-id.supabase.co"
@@ -126,7 +130,7 @@ PORT=3000
 
 ```text
 studioos/
-├── server.ts              # Express API and Production Server
+├── server.ts              # Express API (including AI multi-model fallbacks)
 ├── package.json           # Dependencies and Build Scripts
 ├── .env                   # Secrets (Not tracked)
 └── src/                   # React Frontend Source
@@ -144,8 +148,6 @@ studioos/
 
 ## 📸 Screenshots
 
-*(Add actual screenshots here once deployed)*
-
 | Landing Page | Dashboard |
 |:---:|:---:|
 | <img src="https://via.placeholder.com/400x250.png?text=Landing+Page" alt="Landing Page" width="400"/> | <img src="https://via.placeholder.com/400x250.png?text=Dashboard" alt="Dashboard" width="400"/> |
@@ -153,6 +155,11 @@ studioos/
 | Project Workspace | Mobile View |
 |:---:|:---:|
 | <img src="https://via.placeholder.com/400x250.png?text=Workspace" alt="Project Workspace" width="400"/> | <img src="https://via.placeholder.com/400x250.png?text=Mobile+Responsive" alt="Mobile View" width="400"/> |
+
+> **Note on adding your own screenshots**: 
+> 1. Create a `screenshots` folder in the root of the project.
+> 2. Place your image files there (e.g., `landing.png`).
+> 3. Replace the `https://via.placeholder.com/...` URLs in the markdown table above with the relative path to your images (e.g., `./screenshots/landing.png`).
 
 ---
 
